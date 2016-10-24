@@ -610,14 +610,46 @@ In a standard Java web application, you can use a Servlet Filter to initialize t
 ```java
 public class HystrixRequestContextServletFilter implements Filter {
 
-    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) 
-     throws IOException, ServletException {
-        HystrixRequestContext context = HystrixRequestContext.initializeContext();
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+        final HystrixRequestContext context = HystrixRequestContext.initializeContext();
         try {
             chain.doFilter(request, response);
         } finally {
+            if(request.isAsyncStarted()){
+                //async servlet
+                request.getAsyncContext().addListener(new HystrixRequestContextShutdownListener(context));
+            }else{
+                //sync servlet
+                context.shutdown();
+            }
+        }
+    }
+
+    private class HystrixRequestContextShutdownListener implements AsyncListener {
+        private final HystrixRequestContext context;
+
+        HystrixRequestContextShutdownListener(HystrixRequestContext context) {
+            this.context = context;
+        }
+
+        @Override
+        public void onComplete(AsyncEvent event) throws IOException {
             context.shutdown();
         }
+
+        @Override
+        public void onTimeout(AsyncEvent event) throws IOException {
+            context.shutdown();
+        }
+
+        @Override
+        public void onError(AsyncEvent event) throws IOException {
+            context.shutdown();
+        }
+
+        @Override
+        public void onStartAsync(AsyncEvent event) throws IOException {}
     }
 }
 ```
